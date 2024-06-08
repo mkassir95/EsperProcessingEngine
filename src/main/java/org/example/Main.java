@@ -15,6 +15,10 @@ public class Main {
         AverageSpeedCalculator averageSpeedCalculator = new AverageSpeedCalculator(runtime);
         averageSpeedCalculator.setupAverageSpeedCalculation();
 
+        // Setup the travelled distance calculation
+        DistanceTravelledCalculator distanceCalculator = new DistanceTravelledCalculator(runtime);
+        distanceCalculator.setupDistanceCalculation();
+
         // Main loop to simulate real-time data
         while (!Thread.currentThread().isInterrupted()) {
             TrajectoryDataType randomTrajectoryData = RandomTrajectoryDataTypeGenerator.generateRandomTrajectoryDataType();
