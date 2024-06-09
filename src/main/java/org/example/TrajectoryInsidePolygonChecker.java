@@ -1,5 +1,6 @@
 package org.example;
 
+import com.espertech.esper.common.client.EventBean;
 import com.espertech.esper.common.client.EPCompiled;
 import com.espertech.esper.compiler.client.CompilerArguments;
 import com.espertech.esper.compiler.client.EPCompileException;
@@ -23,9 +24,8 @@ public class TrajectoryInsidePolygonChecker {
         EPCompiler compiler = EPCompilerProvider.getCompiler();
         CompilerArguments arguments = new CompilerArguments(runtime.getConfigurationDeepCopy());
 
-        String epl = "expression latestTrajectory { (select * from TrajectoryDataType.std:lastevent()) } " +
-                "select org.example.SpatialDatabaseManager.isPointInsidePolygon(latestTrajectory.latitude, latestTrajectory.longitude) as inside " +
-                "from pattern [every timer:interval(15 sec)]";
+        // EPL to collect all events in a 15-second window and check each for being inside the polygon
+        String epl = "select * from TrajectoryDataType.win:time_batch(5 sec)";
 
         try {
             EPCompiled compiled = compiler.compile(epl, arguments);
@@ -33,12 +33,20 @@ public class TrajectoryInsidePolygonChecker {
             EPStatement statement = deployment.getStatements()[0];
 
             statement.addListener((newData, oldData, stat, rt) -> {
-                if (newData != null) {
-                    boolean isInside = (boolean) newData[0].get("inside");
-                    System.out.println("Is the latest trajectory inside the polygon? " + isInside);
+                if (newData != null && newData.length > 0) {
+                    boolean allInside = true;
+                    for (EventBean eventBean : newData) {
+                        TrajectoryDataType trajectory = (TrajectoryDataType) eventBean.getUnderlying();
+                        if (!org.example.SpatialDatabaseManager.isPointInsidePolygon(trajectory.getLatitude(), trajectory.getLongitude())) {
+                            allInside = false;
+                            break;
+                        }
+                    }
+                    System.out.println("All trajectories in the last 5 seconds are inside the polygon: " + allInside);
                 }
             });
         } catch (EPCompileException | EPDeployException e) {
+            System.err.println("Error in compiling or deploying EPL: " + e.getMessage());
             e.printStackTrace();
         }
     }

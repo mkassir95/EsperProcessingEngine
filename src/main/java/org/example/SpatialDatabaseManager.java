@@ -47,7 +47,7 @@ public class SpatialDatabaseManager {
      */
     public static void initializePolygonTable(Connection conn) throws SQLException {
         String createTableSQL = "CREATE TABLE IF NOT EXISTS Polygons (id INT PRIMARY KEY, geom GEOMETRY);";
-        String insertPolygonSQL = "MERGE INTO Polygons KEY(id) VALUES (1, 'POLYGON ((-100 0, -50 86.6, 50 86.6, 100 0, 50 -86.6, -50 -86.6, -100 0))');";
+        String insertPolygonSQL = "MERGE INTO Polygons KEY(id) VALUES (1, 'POLYGON ((-150 0, -75 129.9, 75 129.9, 150 0, 75 -129.9, -75 -129.9, -150 0))');";
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createTableSQL);
