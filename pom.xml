@@ -41,6 +41,14 @@
             <artifactId>esper-runtime</artifactId>
             <version>8.9.0</version>
         </dependency>
+
+        <!-- H2GIS dependency -->
+        <!-- https://mvnrepository.com/artifact/org.orbisgis/h2gis -->
+        <dependency>
+            <groupId>org.orbisgis</groupId>
+            <artifactId>h2gis</artifactId>
+            <version>1.5.0</version>
+        </dependency>
     </dependencies>
 
 </project>

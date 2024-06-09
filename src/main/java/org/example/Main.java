@@ -4,12 +4,32 @@ import com.espertech.esper.common.client.configuration.Configuration;
 import com.espertech.esper.runtime.client.EPRuntime;
 import com.espertech.esper.runtime.client.EPRuntimeProvider;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+
 public class Main {
     public static void main(String[] args) {
+        // connect to database
+        try {
+            Connection conn = SpatialDatabaseManager.getConnection();
+            SpatialDatabaseManager.initializePolygonTable(conn);
+            String polygonWKT = SpatialDatabaseManager.getPolygon(conn);
+
+            if (polygonWKT != null) {
+                System.out.println("Polygon WKT: " + polygonWKT);
+            } else {
+                System.out.println("No polygon found.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         // Setup the Esper configuration and runtime
         Configuration config = new Configuration();
         config.getCommon().addEventType(TrajectoryDataType.class);
         EPRuntime runtime = EPRuntimeProvider.getDefaultRuntime(config);
+
+        // Setup the trajectory inside polygon checker
+        new TrajectoryInsidePolygonChecker(runtime);
 
         // Setup the average speed calculation
         AverageSpeedCalculator averageSpeedCalculator = new AverageSpeedCalculator(runtime);
