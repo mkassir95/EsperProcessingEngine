@@ -14,7 +14,14 @@ public class Main {
             Connection conn = SpatialDatabaseManager.getConnection();
             SpatialDatabaseManager.initializePolygonTable(conn);
             String polygonWKT = SpatialDatabaseManager.getPolygon(conn);
+            SpatialDatabaseManager.initializeTrajectoryTable(conn);  // Ensure this is included if you have implemented it
 
+            String trajectoryWKT = SpatialDatabaseManager.getPredefinedTrajectory(conn); // Retrieve the predefined trajectory
+            if (trajectoryWKT != null) {
+                System.out.println("Predefined Trajectory WKT: " + trajectoryWKT);
+            } else {
+                System.out.println("No predefined trajectory found.");
+            }
             if (polygonWKT != null) {
                 System.out.println("Polygon WKT: " + polygonWKT);
             } else {
@@ -38,6 +45,9 @@ public class Main {
         // Setup the travelled distance calculation
         DistanceTravelledCalculator distanceCalculator = new DistanceTravelledCalculator(runtime);
         distanceCalculator.setupDistanceCalculation();
+
+        // Setup the distance to predefined trajectory calculation
+        new DistanceToPredefinedTrajectoryCalculator(runtime);
 
         // Main loop to simulate real-time data
         while (!Thread.currentThread().isInterrupted()) {

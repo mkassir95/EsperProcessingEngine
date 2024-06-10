@@ -128,4 +128,37 @@ public class SpatialDatabaseManager {
         isInside = SpatialDatabaseManager.isPointInsidePolygon(100, 100); // Point outside the hexagon
         System.out.println("Is Point Inside Polygon: " + isInside);
     }
+
+    /**
+     * Initializes the trajectory table and inserts a predefined trajectory if not present.
+     * @param conn The database connection.
+     * @throws SQLException If a SQL error occurs.
+     */
+    public static void initializeTrajectoryTable(Connection conn) throws SQLException {
+        String createTableSQL = "CREATE TABLE IF NOT EXISTS Trajectories (id INT PRIMARY KEY, geom GEOMETRY);";
+        String insertTrajectorySQL = "MERGE INTO Trajectories KEY(id) VALUES (1, 'LINESTRING (30 10, 10 30, 40 40)');";
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(createTableSQL);
+            stmt.execute(insertTrajectorySQL);
+        }
+    }
+
+    /**
+     * Retrieves the predefined trajectory as a WKT string.
+     * @param conn The database connection.
+     * @return The trajectory in WKT format or null if not found.
+     * @throws SQLException If a SQL error occurs.
+     */
+    public static String getPredefinedTrajectory(Connection conn) throws SQLException {
+        String query = "SELECT ST_AsText(geom) FROM Trajectories WHERE id = 1;";
+        try (PreparedStatement stmt = conn.prepareStatement(query);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+        }
+        return null;
+    }
+
 }
