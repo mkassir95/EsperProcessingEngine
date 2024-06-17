@@ -49,6 +49,9 @@ public class Main {
         // Setup the distance to predefined trajectory calculation
         new DistanceToPredefinedTrajectoryCalculator(runtime);
 
+        // Instantiate and set up the speed trend analyzer
+        new SpeedTrendAnalyzer(runtime);
+
         // Main loop to simulate real-time data
         while (!Thread.currentThread().isInterrupted()) {
             TrajectoryDataType randomTrajectoryData = RandomTrajectoryDataTypeGenerator.generateRandomTrajectoryDataType();
