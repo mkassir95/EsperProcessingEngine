@@ -136,7 +136,7 @@ public class SpatialDatabaseManager {
      */
     public static void initializeTrajectoryTable(Connection conn) throws SQLException {
         String createTableSQL = "CREATE TABLE IF NOT EXISTS Trajectories (id INT PRIMARY KEY, geom GEOMETRY);";
-        String insertTrajectorySQL = "MERGE INTO Trajectories KEY(id) VALUES (1, 'LINESTRING (30 10, 10 30, 40 40)');";
+        String insertTrajectorySQL = "MERGE INTO Trajectories KEY(id) VALUES (1, 'LINESTRING (30 10, 10 30, 40 40, 20 20, 50 50, 70 70, 90 90, 110 110, 130 130, 150 150, 170 170, 190 190, 210 210, 230 230, 250 250, 270 270, 290 290)');";
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createTableSQL);

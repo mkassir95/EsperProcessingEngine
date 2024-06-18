@@ -19,6 +19,7 @@ import java.util.List;
 
 public class DistanceToPredefinedTrajectoryCalculator {
     private EPRuntime runtime;
+    private List<Double> previousDistances = new ArrayList<>();
 
     public DistanceToPredefinedTrajectoryCalculator(EPRuntime runtime) {
         this.runtime = runtime;
@@ -66,10 +67,28 @@ public class DistanceToPredefinedTrajectoryCalculator {
                     medianDistance = distances.get(size / 2);
                 }
                 System.out.println("Median distance from trajectory to predefined path: " + medianDistance);
+
+                // Add the current median distance to the list of previous distances
+                previousDistances.add(medianDistance);
+                // Check if the distances are diverging
+                boolean isDiverging = isTrajectoryDiverging();
+                System.out.println("Is the trajectory diverging: " + isDiverging);
             }
         } catch (SQLException e) {
             System.err.println("Database error during distance calculation: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private boolean isTrajectoryDiverging() {
+        // Determine if the distances are increasing over time
+        if (previousDistances.size() < 3) {
+            return false; // Not enough data to determine divergence
+        }
+
+        // Check if the last three distances are increasing
+        int lastIndex = previousDistances.size() - 1;
+        return previousDistances.get(lastIndex) > previousDistances.get(lastIndex - 1) &&
+                previousDistances.get(lastIndex - 1) > previousDistances.get(lastIndex - 2);
     }
 }
