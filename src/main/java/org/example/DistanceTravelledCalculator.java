@@ -9,12 +9,16 @@ import com.espertech.esper.compiler.client.EPCompiler;
 import com.espertech.esper.compiler.client.EPCompilerProvider;
 import com.espertech.esper.runtime.client.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class DistanceTravelledCalculator {
     private EPRuntime runtime;
-    private double cumulativeDistance = 0;  // Store the cumulative distance across all windows
+    private Map<String, Double> cumulativeDistances;  // Store the cumulative distance for each robot
 
     public DistanceTravelledCalculator(EPRuntime runtime) {
         this.runtime = runtime;
+        this.cumulativeDistances = new HashMap<>();
     }
 
     public void setupDistanceCalculation() {
@@ -33,27 +37,38 @@ public class DistanceTravelledCalculator {
 
     private void calculateAndPrintTotalDistanceTravelled(EventBean[] newData, EventBean[] oldData, EPStatement statement, EPRuntime runtime) {
         if (newData != null && newData.length > 0) {
-            TrajectoryDataType previousPoint = (TrajectoryDataType) newData[0].getUnderlying();
-            double windowDistance = 0;
+            Map<String, TrajectoryDataType> previousPoints = new HashMap<>();
 
-            for (int i = 1; i < newData.length; i++) {
-                TrajectoryDataType currentPoint = (TrajectoryDataType) newData[i].getUnderlying();
-                windowDistance += GeoDistance.haversineDistance(
-                        previousPoint.getLatitude(), previousPoint.getLongitude(),
-                        currentPoint.getLatitude(), currentPoint.getLongitude());
-                previousPoint = currentPoint;
+            for (EventBean event : newData) {
+                TrajectoryDataType currentPoint = (TrajectoryDataType) event.getUnderlying();
+                String robotId = currentPoint.getId();
+                TrajectoryDataType previousPoint = previousPoints.get(robotId);
+
+                if (previousPoint != null) {
+                    double distance = GeoDistance.haversineDistance(
+                            previousPoint.getLatitude(), previousPoint.getLongitude(),
+                            currentPoint.getLatitude(), currentPoint.getLongitude());
+
+                    cumulativeDistances.put(robotId, cumulativeDistances.getOrDefault(robotId, 0.0) + distance);
+                }
+
+                previousPoints.put(robotId, currentPoint);
             }
 
-            cumulativeDistance += windowDistance;
-            printFormattedDistance(cumulativeDistance);
+            // Print the cumulative distances for all robots
+            for (Map.Entry<String, Double> entry : cumulativeDistances.entrySet()) {
+                String robotId = entry.getKey();
+                double distance = entry.getValue();
+                printFormattedDistance(robotId, distance);
+            }
         }
     }
 
-    private void printFormattedDistance(double distance) {
+    private void printFormattedDistance(String robotId, double distance) {
         if (distance >= 1000) {
-            System.out.printf("Distance Travelled: %.2f km\n", distance / 1000);
+            System.out.printf("Robot ID: %s, Distance Travelled: %.2f km\n", robotId, distance / 1000);
         } else {
-            System.out.printf("Distance Travelled: %.2f meters\n", distance);
+            System.out.printf("Robot ID: %s, Distance Travelled: %.2f meters\n", robotId, distance);
         }
     }
 }
