@@ -11,6 +11,8 @@ import com.espertech.esper.runtime.client.*;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
 
 public class AverageSpeedCalculator {
     private EPRuntime runtime;
@@ -20,7 +22,7 @@ public class AverageSpeedCalculator {
     }
 
     public void setupAverageSpeedCalculation() {
-        String epl = "select * from TrajectoryDataType.win:time_batch(15 sec)";
+        String epl = "select id, window(*) as points from TrajectoryDataType.win:time_batch(15 sec) group by id";
         EPCompiled compiledQuery;
         try {
             EPCompiler compiler = EPCompilerProvider.getCompiler();
@@ -38,13 +40,18 @@ public class AverageSpeedCalculator {
 
     private void calculateAndPrintAverageSpeed(EventBean[] newData) {
         if (newData != null && newData.length > 0) {
-            List<TrajectoryDataType> points = new ArrayList<>();
             for (EventBean eventBean : newData) {
-                points.add((TrajectoryDataType) eventBean.getUnderlying());
-            }
-            if (!points.isEmpty()) {
-                double averageWeightedSpeed = GeoSpeed.calculateWeightedAverageSpeed(points);
-                System.out.println("Average Weighted Speed over last 15 seconds: " + averageWeightedSpeed + " m/s");
+                String id = (String) eventBean.get("id");
+                Object[] pointsArray = (Object[]) eventBean.get("points");
+                List<TrajectoryDataType> points = new ArrayList<>();
+                for (Object point : pointsArray) {
+                    points.add((TrajectoryDataType) point);
+                }
+
+                if (!points.isEmpty()) {
+                    double averageWeightedSpeed = GeoSpeed.calculateWeightedAverageSpeed(points);
+                    System.out.println("Average Weighted Speed for Robot " + id + " over last 15 seconds: " + averageWeightedSpeed + " m/s");
+                }
             }
         }
     }
