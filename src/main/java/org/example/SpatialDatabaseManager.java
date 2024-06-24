@@ -138,13 +138,35 @@ public class SpatialDatabaseManager {
      * @param conn The database connection.
      * @throws SQLException If a SQL error occurs.
      */
+
     public static void initializeTrajectoryTable(Connection conn) throws SQLException {
-        String createTableSQL = "CREATE TABLE IF NOT EXISTS Trajectories (id INT PRIMARY KEY, geom GEOMETRY);";
-        String insertTrajectorySQL = "MERGE INTO Trajectories KEY(id) VALUES (1, 'LINESTRING (30 10, 10 30, 40 40, 20 20, 50 50, 70 70, 90 90, 110 110, 130 130, 150 150, 170 170, 190 190, 210 210, 230 230, 250 250, 270 270, 290 290)');";
+        String createTableSQL = "CREATE TABLE IF NOT EXISTS Trajectories (" +
+                "id INT PRIMARY KEY, " +
+                "geom GEOMETRY);";
+
+        String[] insertTrajectorySQLs = new String[] {
+                "MERGE INTO Trajectories KEY(id) VALUES (1, 'LINESTRING (30 10, 10 30, 40 40)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (2, 'LINESTRING (50 50, 70 70, 90 90)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (3, 'LINESTRING (110 110, 130 130, 150 150)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (4, 'LINESTRING (170 170, 190 190, 210 210)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (5, 'LINESTRING (230 230, 250 250, 270 270)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (6, 'LINESTRING (290 290, 310 310, 330 330)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (7, 'LINESTRING (350 350, 370 370, 390 390)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (8, 'LINESTRING (30 30, 40 40, 50 50)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (9, 'LINESTRING (60 60, 70 70, 80 80)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (10, 'LINESTRING (100 100, 120 120, 140 140)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (11, 'LINESTRING (200 200, 220 220, 240 240)');",
+                // Add some more complex trajectories for diversity
+                "MERGE INTO Trajectories KEY(id) VALUES (12, 'LINESTRING (10 10, 20 25, 30 10, 40 25, 50 10)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (13, 'LINESTRING (10 10, 15 15, 20 20, 25 25, 30 30, 35 35, 40 40)');",
+                "MERGE INTO Trajectories KEY(id) VALUES (14, 'LINESTRING (5 5, 10 10, 15 15, 20 20, 25 25, 30 30, 35 35)');"
+        };
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createTableSQL);
-            stmt.execute(insertTrajectorySQL);
+            for (String insertSQL : insertTrajectorySQLs) {
+                stmt.execute(insertSQL);
+            }
         }
     }
 
