@@ -10,6 +10,10 @@ import com.espertech.esper.runtime.client.EPRuntime;
 import com.espertech.esper.runtime.client.EPDeployment;
 import com.espertech.esper.runtime.client.EPDeployException;
 import com.espertech.esper.runtime.client.EPStatement;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
 
 public class TrajectoryInsidePolygonChecker {
 
@@ -24,8 +28,8 @@ public class TrajectoryInsidePolygonChecker {
         EPCompiler compiler = EPCompilerProvider.getCompiler();
         CompilerArguments arguments = new CompilerArguments(runtime.getConfigurationDeepCopy());
 
-        // EPL to collect all events in a 15-second window and check each for being inside the polygon
-        String epl = "select * from TrajectoryDataType.win:time_batch(5 sec)";
+        // Update EPL to collect all events in a 15-second window and group by id
+        String epl = "select * from TrajectoryDataType.win:time_batch(15 sec)";
 
         try {
             EPCompiled compiled = compiler.compile(epl, arguments);
@@ -33,16 +37,22 @@ public class TrajectoryInsidePolygonChecker {
             EPStatement statement = deployment.getStatements()[0];
 
             statement.addListener((newData, oldData, stat, rt) -> {
-                if (newData != null && newData.length > 0) {
-                    boolean allInside = true;
+                if (newData != null) {
+                    // Using a Map to group by robot ID and analyze each group
+                    Map<String, List<TrajectoryDataType>> groupedData = new HashMap<>();
+
                     for (EventBean eventBean : newData) {
                         TrajectoryDataType trajectory = (TrajectoryDataType) eventBean.getUnderlying();
-                        if (!org.example.SpatialDatabaseManager.isPointInsidePolygon(trajectory.getLatitude(), trajectory.getLongitude())) {
-                            allInside = false;
-                            break;
-                        }
+                        groupedData.putIfAbsent(trajectory.getId(), new ArrayList<>());
+                        groupedData.get(trajectory.getId()).add(trajectory);
                     }
-                    System.out.println("All trajectories in the last 5 seconds are inside the polygon: " + allInside);
+
+                    // Evaluate each group for being inside the polygon
+                    groupedData.forEach((id, trajectories) -> {
+                        boolean allInside = trajectories.stream()
+                                .allMatch(trajectory -> org.example.SpatialDatabaseManager.isPointInsidePolygon(trajectory.getLatitude(), trajectory.getLongitude()));
+                        System.out.println("Robot ID " + id + ": All trajectories in the last 15 seconds are inside the polygon: " + allInside);
+                    });
                 }
             });
         } catch (EPCompileException | EPDeployException e) {

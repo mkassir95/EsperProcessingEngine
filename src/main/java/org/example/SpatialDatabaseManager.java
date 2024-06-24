@@ -47,13 +47,17 @@ public class SpatialDatabaseManager {
      */
     public static void initializePolygonTable(Connection conn) throws SQLException {
         String createTableSQL = "CREATE TABLE IF NOT EXISTS Polygons (id INT PRIMARY KEY, geom GEOMETRY);";
-        String insertPolygonSQL = "MERGE INTO Polygons KEY(id) VALUES (1, 'POLYGON ((-150 0, -75 129.9, 75 129.9, 150 0, 75 -129.9, -75 -129.9, -150 0))');";
+        String clearTableSQL = "DELETE FROM Polygons;";
+        String insertPolygonsSQL = "INSERT INTO Polygons (id, geom) VALUES "
+                + "(1, 'POLYGON ((46.3389 3.4336, 46.3393 3.4337, 46.3392 3.4339, 46.3391 3.4340, 46.3390 3.4338, 46.3389 3.4336))');";
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createTableSQL);
-            stmt.execute(insertPolygonSQL);
+            stmt.execute(clearTableSQL);
+            stmt.execute(insertPolygonsSQL);
         }
     }
+
 
     /**
      * Retrieves the stored polygon as a WKT string.
