@@ -13,6 +13,14 @@ import java.net.Socket;
 
 public class Main {
     public static void main(String[] args) {
+        SSHUtil sshUtil = new SSHUtil("10.63.64.48", "romea", "romea63*");
+        String kafkaCommand = "/home/romea/kafka/bin/kafka-topics.sh --list --bootstrap-server 10.63.64.48:9092";
+
+
+        // You might need to adjust the path to the kafka-topics.sh script according to your server's setup.
+        String topicsList = sshUtil.executeCommand(kafkaCommand);
+        System.out.println("Available Kafka Topics:");
+        System.out.println(topicsList);
         // Setup the Esper configuration and runtime
         Configuration config = new Configuration();
         config.getCommon().addEventType(TrajectoryDataType.class);
