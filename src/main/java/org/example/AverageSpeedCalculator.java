@@ -43,14 +43,14 @@ public class AverageSpeedCalculator {
             EPStatement statement = runtime.getDeploymentService().deploy(compiledQuery).getStatements()[0];
 
             // Add listener to the statement
-            statement.addListener((newData, oldData, stat, rt) -> calculateAndPublishAverageSpeed(newData));
+            statement.addListener((newData, oldData, stat, rt) -> calculateAndPublishAverageMetrics(newData));
 
         } catch (EPCompileException | EPDeployException e) {
             System.err.println("Error in compiling or deploying EPL: " + e.getMessage());
         }
     }
 
-    private void calculateAndPublishAverageSpeed(EventBean[] newData) {
+    private void calculateAndPublishAverageMetrics(EventBean[] newData) {
         if (newData != null && newData.length > 0) {
             for (EventBean eventBean : newData) {
                 String id = (String) eventBean.get("id");
@@ -62,8 +62,11 @@ public class AverageSpeedCalculator {
 
                 if (!points.isEmpty()) {
                     double averageWeightedSpeed = GeoSpeed.calculateWeightedAverageSpeed(points);
-                    String message = id + "-" + averageWeightedSpeed + " m/s";
-                    System.out.println("Average Weighted Speed for Robot " + id + " over last 15 seconds: " + averageWeightedSpeed + " m/s");
+                    TrajectoryDataType firstPoint = points.get(0);
+                    TrajectoryDataType lastPoint = points.get(points.size() - 1);
+
+                    String message = id + "@" + firstPoint.getLatitude() + "@" + firstPoint.getLongitude() + "@" + lastPoint.getLatitude() + "@" + lastPoint.getLongitude() + "@" + averageWeightedSpeed + " m/s";
+                    System.out.println("Metrics for Robot " + id + " over last 15 seconds: First(Lat=" + firstPoint.getLatitude() + ", Lon=" + firstPoint.getLongitude() + "), Last(Lat=" + lastPoint.getLatitude() + ", Lon=" + lastPoint.getLongitude() + "), Speed=" + averageWeightedSpeed + " m/s");
                     producer.send(new ProducerRecord<>("r2k_pos2", id, message));
                 }
             }
