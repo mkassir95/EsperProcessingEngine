@@ -65,11 +65,17 @@ public class AverageSpeedCalculator {
                     TrajectoryDataType firstPoint = points.get(0);
                     TrajectoryDataType lastPoint = points.get(points.size() - 1);
 
-                    String message = id + "@" + firstPoint.getLatitude() + "@" + firstPoint.getLongitude() + "@" + lastPoint.getLatitude() + "@" + lastPoint.getLongitude() + "@" + averageWeightedSpeed + " m/s";
-                    System.out.println("Metrics for Robot " + id + " over last 15 seconds: First(Lat=" + firstPoint.getLatitude() + ", Lon=" + firstPoint.getLongitude() + "), Last(Lat=" + lastPoint.getLatitude() + ", Lon=" + lastPoint.getLongitude() + "), Speed=" + averageWeightedSpeed + " m/s");
+                    // Get first and last timestamps
+                    long firstTimestamp = firstPoint.getTimestamp();
+                    long lastTimestamp = lastPoint.getTimestamp();
+
+                    // Construct message with timestamps included
+                    String message = id + "@" + firstPoint.getLatitude() + "@" + firstPoint.getLongitude() + "@" + lastPoint.getLatitude() + "@" + lastPoint.getLongitude() + "@" + averageWeightedSpeed + " m/s@" + firstTimestamp + "@" + lastTimestamp;
+                    System.out.println("Metrics for Robot " + id + " over last 15 seconds: First(Lat=" + firstPoint.getLatitude() + ", Lon=" + firstPoint.getLongitude() + "), Last(Lat=" + lastPoint.getLatitude() + ", Lon=" + lastPoint.getLongitude() + "), Speed=" + averageWeightedSpeed + " m/s, First Timestamp=" + firstTimestamp + ", Last Timestamp=" + lastTimestamp);
                     producer.send(new ProducerRecord<>("r2k_pos2", id, message));
                 }
             }
         }
     }
+
 }
