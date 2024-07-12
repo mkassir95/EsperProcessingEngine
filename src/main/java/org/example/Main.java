@@ -52,6 +52,9 @@ public class Main {
 
         // Initialize calculators and checkers
         new TrajectoryInsidePolygonChecker(runtime);
+
+        // Initialize the MultiWindowDistanceCalculator with different time windows
+        MultiWindowDistanceCalculator multiWindowDistanceCalculator = new MultiWindowDistanceCalculator(runtime);
         // Create an instance of SpeedWindowTracker
         SpeedWindowTracker speedWindowtracker = new SpeedWindowTracker(runtime);
         GpsSpeedWindowTracker tracker = new GpsSpeedWindowTracker(runtime);
