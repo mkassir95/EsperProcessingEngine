@@ -52,6 +52,7 @@ public class Main {
 
         // Initialize calculators and checkers
         new TrajectoryInsidePolygonChecker(runtime);
+        GpsSpeedWindowTracker tracker = new GpsSpeedWindowTracker(runtime);
         AverageSpeedCalculator averageSpeedCalculator = new AverageSpeedCalculator(runtime);
         averageSpeedCalculator.setupAverageSpeedCalculation();
         DistanceTravelledCalculator distanceCalculator = new DistanceTravelledCalculator(runtime);
