@@ -22,12 +22,17 @@ public class GpsSpeedWindowTracker {
     private EPRuntime runtime;
     private Map<String, TrajectoryDataType> previousDataPoints;
     private KafkaProducer<String, String> producer;
+    private String currentDeploymentId;
 
     public GpsSpeedWindowTracker(EPRuntime runtime) {
         this.runtime = runtime;
         this.previousDataPoints = new HashMap<>();
         setupKafkaProducer();
-        setupWindowsForTracking();
+        try {
+            configureWindow("60");  // Default to a window of 60 seconds initially
+        } catch (EPUndeployException e) {
+            System.err.println("Error during initial configuration: " + e.getMessage());
+        }
     }
 
     private void setupKafkaProducer() {
@@ -38,91 +43,100 @@ public class GpsSpeedWindowTracker {
         producer = new KafkaProducer<>(props);
     }
 
-    private void setupWindowsForTracking() {
-        configureWindow("60");
-        configureWindow("30");
-        configureWindow("3");
-    }
+    private void configureWindow(String seconds) throws EPUndeployException {
+        if (currentDeploymentId != null) {
+            // Undeploy the current EPL statement by deployment ID
+            try {
+                runtime.getDeploymentService().undeploy(currentDeploymentId);
+            } catch (EPUndeployException e) {
+                System.err.println("Error undeploying the EPL statement: " + e.getMessage());
+                throw e; // Rethrow to handle it at the caller level
+            }
+        }
 
-    private void configureWindow(String seconds) {
         String epl = String.format(
                 "select id, latitude, longitude, speed, timestamp " +
                         "from TrajectoryDataType.win:time_batch(%s sec) " +
                         "order by id, timestamp",
-                seconds);
+                seconds
+        );
 
         try {
             EPCompiler compiler = EPCompilerProvider.getCompiler();
             CompilerArguments arguments = new CompilerArguments(runtime.getConfigurationDeepCopy());
             EPCompiled compiledQuery = compiler.compile(epl, arguments);
-            EPStatement statement = runtime.getDeploymentService().deploy(compiledQuery).getStatements()[0];
+            EPDeployment deployment = runtime.getDeploymentService().deploy(compiledQuery);
+            currentDeploymentId = deployment.getDeploymentId();
+            EPStatement statement = deployment.getStatements()[0];
 
             statement.addListener((newData, oldData, stat, rt) -> {
-                if (newData != null) {
-                    Map<String, Double> totalDistances = new HashMap<>();
-                    Map<String, TrajectoryDataType> lastDataPoints = new HashMap<>();
+                Map<String, Double> totalDistances = new HashMap<>();
+                Map<String, TrajectoryDataType> lastDataPoints = new HashMap<>();
+                String newWindowSeconds = "60"; // Default to 60 seconds
 
-                    for (EventBean eventBean : newData) {
-                        String robotId = (String) eventBean.get("id");
-                        double latitude = (double) eventBean.get("latitude");
-                        double longitude = (double) eventBean.get("longitude");
-                        double speed = (double) eventBean.get("speed");
-                        long timestamp = (long) eventBean.get("timestamp");
+                for (EventBean eventBean : newData) {
+                    processEventBean(eventBean, totalDistances, lastDataPoints);
+                }
 
-                        TrajectoryDataType currentData = new TrajectoryDataType(robotId, timestamp, latitude, longitude, speed);
-                        TrajectoryDataType previousData = previousDataPoints.get(robotId);
-
-                        if (previousData != null) {
-                            double distance = calculateDistance(
-                                    previousData.getLatitude(), previousData.getLongitude(),
-                                    currentData.getLatitude(), currentData.getLongitude());
-
-                            totalDistances.put(robotId, totalDistances.getOrDefault(robotId, 0.0) + distance);
-                        }
-
-                        lastDataPoints.put(robotId, currentData);
-                        previousDataPoints.put(robotId, currentData);
+                for (Map.Entry<String, Double> entry : totalDistances.entrySet()) {
+                    TrajectoryDataType lastData = lastDataPoints.get(entry.getKey());
+                    if (lastData != null) {
+                        newWindowSeconds = determineWindowSize(lastData, entry.getValue());
                     }
+                    publishToKafka(lastData, entry.getValue(), newWindowSeconds);
+                }
 
-                    for (Map.Entry<String, Double> entry : totalDistances.entrySet()) {
-                        String robotId = entry.getKey();
-                        double totalDistance = entry.getValue();
-                        TrajectoryDataType lastData = lastDataPoints.get(robotId);
-
-                        if (lastData != null) {
-                            String speedStatus;
-                            double speed = lastData.getSpeed();
-                            if (speed == 0 || speed >= 46) {
-                                speedStatus = "speed_alert";
-                            } else if ((speed >= 1 && speed <= 15) || (speed >= 30 && speed <= 45)) {
-                                speedStatus = "speed_warning";
-                            } else {
-                                speedStatus = "speed_ok";
-                            }
-
-                            String distanceStatus;
-                            if (totalDistance <= 5) {
-                                distanceStatus = "distance_alert";
-                            } else if (totalDistance >= 6 && totalDistance <= 10) {
-                                distanceStatus = "distance_warning";
-                            } else {
-                                distanceStatus = "distance_ok";
-                            }
-
-                            String message = String.format(Locale.US, "Robot ID: %s, Last Speed: %.6f, Last GPS: %.6f meters, Window Size: %s seconds, Speed Status: %s, Distance Status: %s",
-                                    lastData.getId(), lastData.getSpeed(), totalDistance, seconds, speedStatus, distanceStatus);
-                            producer.send(new ProducerRecord<>("last_speed_gps", robotId, message));
-                            System.out.println(message);
-                        }
-                    }
-
-                    // Clear the previous data points to start fresh for the next window
-                    previousDataPoints.clear();
-                    previousDataPoints.putAll(lastDataPoints);
+                // Update window size if needed
+                try {
+                    configureWindow(newWindowSeconds);
+                } catch (EPUndeployException e) {
+                    System.err.println("Error reconfiguring window: " + e.getMessage());
                 }
             });
         } catch (EPCompileException | EPDeployException e) {
             System.err.println("Error in compiling or deploying EPL for window every " + seconds + " seconds: " + e.getMessage());
+        }
+    }
+
+    private void processEventBean(EventBean eventBean, Map<String, Double> totalDistances, Map<String, TrajectoryDataType> lastDataPoints) {
+        String robotId = (String) eventBean.get("id");
+        double latitude = (double) eventBean.get("latitude");
+        double longitude = (double) eventBean.get("longitude");
+        double speed = (double) eventBean.get("speed");
+        long timestamp = (long) eventBean.get("timestamp");
+
+        TrajectoryDataType currentData = new TrajectoryDataType(robotId, timestamp, latitude, longitude, speed);
+        TrajectoryDataType previousData = previousDataPoints.get(robotId);
+
+        if (previousData != null) {
+            double distance = calculateDistance(
+                    previousData.getLatitude(), previousData.getLongitude(),
+                    currentData.getLatitude(), currentData.getLongitude());
+
+            totalDistances.put(robotId, totalDistances.getOrDefault(robotId, 0.0) + distance);
+        }
+
+        lastDataPoints.put(robotId, currentData);
+        previousDataPoints.put(robotId, currentData);
+    }
+
+    private String determineWindowSize(TrajectoryDataType data, double lastGpsDistance) {
+        if (data.getSpeed() == 0 || data.getSpeed() >= 46 || lastGpsDistance < 5) {
+            return "3"; // Window of 3 seconds
+        } else if ((data.getSpeed() >= 1 && data.getSpeed() <= 15) || (data.getSpeed() >= 30 && data.getSpeed() <= 45) ||
+                (lastGpsDistance >= 6 && lastGpsDistance <= 10)) {
+            return "30"; // Window of 30 seconds
+        } else {
+            return "60"; // Window of 60 seconds
+        }
+    }
+
+    private void publishToKafka(TrajectoryDataType data, double totalDistance, String windowSeconds) {
+        if (data != null) {
+            String message = String.format(Locale.US, "Robot ID: %s, Last Speed: %.6f, Last GPS: %.6f meters, Window Size: %s seconds",
+                    data.getId(), data.getSpeed(), totalDistance, windowSeconds);
+            producer.send(new ProducerRecord<>("last_speed_gps", data.getId(), message));
+            System.out.println(message);
         }
     }
 
