@@ -20,11 +20,12 @@ public class MultiWindowDistanceCalculator {
     private EPRuntime runtime;
     private Map<String, List<Double>> robotDistances = new HashMap<>();
     private Producer<String, String> producer;
+    private int currentWindowSeconds = 60; // Start with 60 seconds as the initial window size
 
     public MultiWindowDistanceCalculator(EPRuntime runtime) {
         this.runtime = runtime;
-        setupDistanceCalculationQueries();
         setupKafkaProducer();
+        setupDistanceCalculationQuery(currentWindowSeconds); // Start with a 60 seconds window
     }
 
     private void setupKafkaProducer() {
@@ -33,13 +34,6 @@ public class MultiWindowDistanceCalculator {
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
         producer = new KafkaProducer<>(props);
-    }
-
-    private void setupDistanceCalculationQueries() {
-        int[] timeWindows = new int[]{3, 30, 60}; // Time windows in seconds
-        for (int window : timeWindows) {
-            setupDistanceCalculationQuery(window);
-        }
     }
 
     private void setupDistanceCalculationQuery(int windowSeconds) {
@@ -51,16 +45,16 @@ public class MultiWindowDistanceCalculator {
             EPCompiled compiled = compiler.compile(epl, arguments);
             EPDeployment deployment = runtime.getDeploymentService().deploy(compiled);
             EPStatement statement = deployment.getStatements()[0];
-            statement.addListener((newData, oldData, stat, rt) -> calculateDistances(newData, windowSeconds));
+            statement.addListener((newData, oldData, stat, rt) -> calculateDistances(newData));
         } catch (EPCompileException | EPDeployException e) {
             System.err.println("Error in compiling or deploying EPL for window " + windowSeconds + " seconds: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private void calculateDistances(EventBean[] newData, int windowSeconds) {
+    private void calculateDistances(EventBean[] newData) {
         if (newData == null || newData.length == 0) {
-            System.out.println("No new data received for the " + windowSeconds + " second window.");
+            System.out.println("No new data received for the " + currentWindowSeconds + " second window.");
             return;
         }
 
@@ -76,16 +70,40 @@ public class MultiWindowDistanceCalculator {
             robotDistances.forEach((id, distances) -> {
                 Collections.sort(distances);
                 double medianDistance = calculateMedian(distances);
+                adjustWindowBasedOnDistance(medianDistance);
                 String status = getDistanceStatus(medianDistance);
-                String message = id + "@" + medianDistance + "@" + status + "@" + windowSeconds + " sec";
+                String message = id + "@" + medianDistance + "@" + status + "@" + currentWindowSeconds + " sec";
                 producer.send(new ProducerRecord<>("distance_trajectory_ref", id, message));
-                System.out.println("Multi window Distance Sent to Kafka -> Window " + windowSeconds + "s, Message: " + message);
+                System.out.println("Multi window Distance Sent to Kafka -> Window " + currentWindowSeconds + "s, Message: " + message);
             });
 
             robotDistances.clear();
         } catch (SQLException e) {
             System.err.println("Database error during distance calculation: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private void adjustWindowBasedOnDistance(double medianDistance) {
+        int newWindowSeconds = (medianDistance <= 5) ? 3 : (medianDistance <= 10) ? 10 : 60;
+        if (newWindowSeconds != currentWindowSeconds) {
+            try {
+                // Attempt to undeploy all deployments
+                runtime.getDeploymentService().undeployAll();
+                currentWindowSeconds = newWindowSeconds;
+                setupDistanceCalculationQuery(currentWindowSeconds);
+            } catch (EPUndeployException e) {
+                System.err.println("Failed to undeploy previous deployment: " + e.getMessage());
+                try {
+                    // Retry undeployment
+                    runtime.getDeploymentService().undeployAll();
+                    currentWindowSeconds = newWindowSeconds;
+                    setupDistanceCalculationQuery(currentWindowSeconds);
+                } catch (EPUndeployException retryException) {
+                    System.err.println("Retry failed, check Esper runtime state: " + retryException.getMessage());
+                    retryException.printStackTrace();
+                }
+            }
         }
     }
 
