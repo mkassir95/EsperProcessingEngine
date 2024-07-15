@@ -85,7 +85,7 @@ public class MultiWindowDistanceCalculator {
     }
 
     private void adjustWindowBasedOnDistance(double medianDistance) {
-        int newWindowSeconds = (medianDistance <= 5) ? 3 : (medianDistance <= 10) ? 10 : 60;
+        int newWindowSeconds = (medianDistance <= 5) ? 3 : (medianDistance <= 10) ? 30 : 60;
         if (newWindowSeconds != currentWindowSeconds) {
             try {
                 // Attempt to undeploy all deployments
