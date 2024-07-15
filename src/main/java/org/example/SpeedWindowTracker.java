@@ -18,11 +18,12 @@ import java.util.Properties;
 public class SpeedWindowTracker {
     private EPRuntime runtime;
     private KafkaProducer<String, String> producer;
+    private String currentDeploymentId = null;
 
     public SpeedWindowTracker(EPRuntime runtime) {
         this.runtime = runtime;
         setupKafkaProducer();
-        setupWindowsForTracking();
+        configureInitialWindow();
     }
 
     private void setupKafkaProducer() {
@@ -33,24 +34,30 @@ public class SpeedWindowTracker {
         producer = new KafkaProducer<>(props);
     }
 
-    private void setupWindowsForTracking() {
-        configureWindow(60);
-        configureWindow(30);
-        configureWindow(3);
+    private void configureInitialWindow() {
+        deployWindow(60);  // Start with a default window of 60 seconds
     }
 
-    private void configureWindow(int seconds) {
+    private void deployWindow(int seconds) {
+        if (currentDeploymentId != null) {
+            try {
+                runtime.getDeploymentService().undeploy(currentDeploymentId);
+            } catch (Exception e) {
+                System.err.println("Failed to undeploy previous window: " + e.getMessage());
+            }
+        }
+
         String epl = String.format(
-                "select id, avg(speed) as avgSpeed " +
-                        "from TrajectoryDataType.win:time_batch(%d sec) " +
-                        "group by id",
+                "select id, avg(speed) as avgSpeed from TrajectoryDataType.win:time_batch(%d sec) group by id",
                 seconds);
 
         try {
             EPCompiler compiler = EPCompilerProvider.getCompiler();
             CompilerArguments arguments = new CompilerArguments(runtime.getConfigurationDeepCopy());
             EPCompiled compiledQuery = compiler.compile(epl, arguments);
-            EPStatement statement = runtime.getDeploymentService().deploy(compiledQuery).getStatements()[0];
+            EPDeployment deployment = runtime.getDeploymentService().deploy(compiledQuery);
+            currentDeploymentId = deployment.getDeploymentId();
+            EPStatement statement = deployment.getStatements()[0];
 
             statement.addListener((newData, oldData, stat, rt) -> {
                 if (newData != null) {
@@ -58,16 +65,30 @@ public class SpeedWindowTracker {
                         String robotId = (String) eventBean.get("id");
                         double avgSpeed = (double) eventBean.get("avgSpeed");
                         String speedStatus = determineSpeedStatus(avgSpeed);
-                        String windowDesc = seconds + " seconds"; // Descriptive window size
-                        String message = robotId + "@" + avgSpeed + "@" + speedStatus + "@" + windowDesc;
+                        int newWindowSeconds = determineWindowSize(avgSpeed);
+                        if (newWindowSeconds != seconds) {  // Only redeploy if the window size needs to change
+                            deployWindow(newWindowSeconds);
+                        }
+
+                        String message = robotId + "@" + avgSpeed + "@" + speedStatus + "@" + newWindowSeconds + " seconds";
                         producer.send(new ProducerRecord<>("average_speed", robotId, message));
                         System.out.printf("Published to Kafka -> Robot ID: %s, Avg Speed: %.2f m/s, Status: %s, Window: %s%n",
-                                robotId, avgSpeed, speedStatus, windowDesc);
+                                robotId, avgSpeed, speedStatus, newWindowSeconds + " seconds");
                     }
                 }
             });
         } catch (EPCompileException | EPDeployException e) {
-            System.err.println("Error in compiling or deploying EPL for window every " + seconds + " seconds: " + e.getMessage());
+            System.err.println("Error in compiling or deploying EPL: " + e.getMessage());
+        }
+    }
+
+    private int determineWindowSize(double avgSpeed) {
+        if (avgSpeed == 0 || avgSpeed >= 46) {
+            return 3;
+        } else if ((avgSpeed >= 1 && avgSpeed <= 15) || (avgSpeed >= 30 && avgSpeed <= 45)) {
+            return 30;
+        } else {
+            return 60;
         }
     }
 
