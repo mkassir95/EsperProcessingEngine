@@ -9,24 +9,25 @@ import com.espertech.esper.compiler.client.EPCompiler;
 import com.espertech.esper.compiler.client.EPCompilerProvider;
 import com.espertech.esper.runtime.client.*;
 
+import com.google.gson.Gson;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 public class GpsSpeedWindowTracker {
     private EPRuntime runtime;
     private Map<String, TrajectoryDataType> previousDataPoints;
     private KafkaProducer<String, String> producer;
     private String currentDeploymentId;
+    private Map<String, List<TrajectoryDataType>> allDataPointsByRobot;
+    private Gson gson = new Gson(); // Create a Gson instance for object serialization
 
     public GpsSpeedWindowTracker(EPRuntime runtime) {
         this.runtime = runtime;
         this.previousDataPoints = new HashMap<>();
+        this.allDataPointsByRobot = new HashMap<>();
         setupKafkaProducer();
         try {
             configureWindow("60");  // Default to a window of 60 seconds initially
@@ -107,6 +108,8 @@ public class GpsSpeedWindowTracker {
 
         TrajectoryDataType currentData = new TrajectoryDataType(robotId, timestamp, latitude, longitude, speed);
         TrajectoryDataType previousData = previousDataPoints.get(robotId);
+        allDataPointsByRobot.computeIfAbsent(robotId, k -> new ArrayList<>()).add(currentData); // Add current data point to list for this robot
+
 
         if (previousData != null) {
             double distance = calculateDistance(
@@ -133,12 +136,64 @@ public class GpsSpeedWindowTracker {
 
     private void publishToKafka(TrajectoryDataType data, double totalDistance, String windowSeconds) {
         if (data != null) {
-            String message = String.format(Locale.US, "Robot ID: %s, Last Speed: %.6f, Last GPS: %.6f meters, Window Size: %s seconds",
-                    data.getId(), data.getSpeed(), totalDistance, windowSeconds);
+            // Retrieve all data points for the robot
+            List<TrajectoryDataType> allDataPoints = allDataPointsByRobot.get(data.getId());
+
+            // Generate filtered data points for the robot
+            List<TrajectoryDataType> filteredDataPoints = new ArrayList<>();
+            TrajectoryDataType previousPoint = null;
+            for (TrajectoryDataType point : allDataPoints) {
+                if (shouldIncludePoint(point, previousPoint)) {
+                    filteredDataPoints.add(point);
+                }
+                previousPoint = point;
+            }
+
+            // Determine speed and distance status
+            String speedStatus = determineSpeedStatus(data.getSpeed());
+            String distanceStatus = determineDistanceStatus(totalDistance);
+
+        // Serialize the filtered data points to JSON only if both conditions are "ok"
+            String filteredDataPointsJson = (speedStatus.equals("speed_ok") && distanceStatus.equals("distance_ok"))
+                    ? "[]"  // Provide an empty array if both conditions are "ok"
+                    : gson.toJson(filteredDataPoints); // Include filtered data otherwise
+
+
+
+
+            // Construct the message
+            String message = String.format(Locale.US,
+                    "Robot ID: %s, Last Speed: %.6f, Speed Status: %s, Last GPS: %.6f meters, Distance Status: %s, Window Size: %s seconds, Filtered Data Points: %s",
+                    data.getId(), data.getSpeed(), speedStatus, totalDistance, distanceStatus, windowSeconds, filteredDataPointsJson);
+
+            // Send the message to the same Kafka topic as before
             producer.send(new ProducerRecord<>("last_speed_gps", data.getId(), message));
-            System.out.println(message);
+            System.out.println("important Published to Kafka: " + message);
         }
     }
+
+    // Utility method to determine speed status based on the last speed
+    private String determineSpeedStatus(double speed) {
+        if (speed == 0 || speed >= 46) {
+            return "speed_alert";
+        } else if ((speed >= 1 && speed <= 15) || (speed >= 30 && speed <= 45)) {
+            return "speed_warning";
+        } else {
+            return "speed_ok";
+        }
+    }
+
+    // Utility method to determine distance status based on the last GPS distance
+    private String determineDistanceStatus(double lastGpsDistance) {
+        if (lastGpsDistance < 5) {
+            return "distance_alert";
+        } else if (lastGpsDistance >= 6 && lastGpsDistance <= 10) {
+            return "distance_warning";
+        } else {
+            return "distance_ok";
+        }
+    }
+
 
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         final int R = 6371000; // Radius of the earth in meters
@@ -149,6 +204,27 @@ public class GpsSpeedWindowTracker {
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c; // Distance in meters
+    }
+
+
+
+    // Adjust the shouldIncludePoint method to include only necessary conditions
+    private boolean shouldIncludePoint(TrajectoryDataType currentPoint, TrajectoryDataType previousPoint) {
+        return (currentPoint.getSpeed() == 0 || currentPoint.getSpeed() >= 46 ||
+                (currentPoint.getSpeed() >= 1 && currentPoint.getSpeed() <= 15) ||
+                (currentPoint.getSpeed() >= 30 && currentPoint.getSpeed() <= 45)) ||
+                (previousPoint != null && checkDistance(previousPoint, currentPoint));
+    }
+
+
+    // Helper function to check the distance condition during normal filtering
+    private boolean checkDistance(TrajectoryDataType previousPoint, TrajectoryDataType currentPoint) {
+        double distance = calculateDistance(
+                previousPoint.getLatitude(), previousPoint.getLongitude(),
+                currentPoint.getLatitude(), currentPoint.getLongitude()
+        );
+
+        return (distance < 5 || (distance >= 6 && distance <= 10));
     }
 
     public static void main(String[] args) {
