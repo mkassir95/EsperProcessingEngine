@@ -65,6 +65,9 @@ public class Main {
         new DistanceToPredefinedTrajectoryCalculator(runtime);
         SpeedTrendAnalyzer speedTrendAnalyzer = new SpeedTrendAnalyzer(runtime);
 
+        TrajectoryDelay trajectoryDelay= new TrajectoryDelay(runtime);
+        trajectoryDelay.getDataPoints();
+
         // Keep the main thread alive or perform other tasks
         while (!Thread.currentThread().isInterrupted()) {
             try {
