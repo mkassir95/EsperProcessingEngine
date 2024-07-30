@@ -51,6 +51,7 @@ public class AverageSpeedCalculator {
     }
 
     private void calculateAndPublishAverageMetrics(EventBean[] newData) {
+        long startTime=System.currentTimeMillis();
         if (newData != null && newData.length > 0) {
             for (EventBean eventBean : newData) {
                 String id = (String) eventBean.get("id");
@@ -68,9 +69,11 @@ public class AverageSpeedCalculator {
                     // Get first and last timestamps
                     long firstTimestamp = firstPoint.getTimestamp();
                     long lastTimestamp = lastPoint.getTimestamp();
+                    long endTime=System.currentTimeMillis();
+                    long processingTime=endTime-startTime;
 
                     // Construct message with timestamps included
-                    String message = id + "@" + firstPoint.getLatitude() + "@" + firstPoint.getLongitude() + "@" + lastPoint.getLatitude() + "@" + lastPoint.getLongitude() + "@" + averageWeightedSpeed + " m/s@" + firstTimestamp + "@" + lastTimestamp;
+                    String message = id + "@" + firstPoint.getLatitude() + "@" + firstPoint.getLongitude() + "@" + lastPoint.getLatitude() + "@" + lastPoint.getLongitude() + "@" + averageWeightedSpeed + " m/s@" + firstTimestamp + "@" + lastTimestamp+"@"+processingTime;
                     System.out.println("Metrics for Robot " + id + " over last 15 seconds: First(Lat=" + firstPoint.getLatitude() + ", Lon=" + firstPoint.getLongitude() + "), Last(Lat=" + lastPoint.getLatitude() + ", Lon=" + lastPoint.getLongitude() + "), Speed=" + averageWeightedSpeed + " m/s, First Timestamp=" + firstTimestamp + ", Last Timestamp=" + lastTimestamp);
                     producer.send(new ProducerRecord<>("r2k_pos2", id, message));
                 }
