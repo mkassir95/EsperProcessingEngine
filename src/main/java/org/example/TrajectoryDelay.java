@@ -122,11 +122,14 @@ public class TrajectoryDelay {
     public static Connection connect() {
         Connection conn = null;
         try {
+            Class.forName("org.postgresql.Driver");
             conn = DriverManager.getConnection(url, user, password);
             System.out.println("Connected to the PostgreSQL server successfully.");
         } catch (SQLException e) {
             System.out.println("Connection failure.");
             e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
         }
         return conn;
     }
