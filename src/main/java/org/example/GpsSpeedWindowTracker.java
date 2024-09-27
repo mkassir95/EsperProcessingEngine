@@ -23,6 +23,7 @@ public class GpsSpeedWindowTracker {
     private String currentDeploymentId;
     private Map<String, List<TrajectoryDataType>> allDataPointsByRobot;
     private Gson gson = new Gson(); // Create a Gson instance for object serialization
+    private int counter=0;
 
     public GpsSpeedWindowTracker(EPRuntime runtime) {
         this.runtime = runtime;
@@ -136,6 +137,7 @@ public class GpsSpeedWindowTracker {
 
     private void publishToKafka(TrajectoryDataType data, double totalDistance, String windowSeconds) {
         if (data != null) {
+            producer.send(new ProducerRecord<>("topic_test", data.getId(), windowSeconds));
             // Retrieve all data points for the robot
             List<TrajectoryDataType> allDataPoints = allDataPointsByRobot.get(data.getId());
 
@@ -163,12 +165,53 @@ public class GpsSpeedWindowTracker {
 
             // Construct the message
             String message = String.format(Locale.US,
-                    "Robot ID: %s, Last Speed: %.6f, Speed Status: %s, Last GPS: %.6f meters, Distance Status: %s, Window Size: %s seconds, Filtered Data Points: %s",
-                    data.getId(), data.getSpeed(), speedStatus, totalDistance, distanceStatus, windowSeconds, filteredDataPointsJson);
-
+                    "%d %s %.6f %.6f %.6f",
+                    data.getTimestamp(), // Assuming the timestamp is a long representing Unix time
+                    data.getId(),
+                    data.getLatitude(), data.getLongitude(), // Include latitude and longitude
+                    data.getSpeed()); // Moving speed to the end of the message
             // Send the message to the same Kafka topic as before
             producer.send(new ProducerRecord<>("last_speed_gps", data.getId(), message));
+            if (!speedStatus.equals("speed_ok") || !distanceStatus.equals("distance_ok")) {
+                counter++;
+                int messageCode=-1;
+                if(speedStatus.equals("speed_alert") || distanceStatus.equals("distance_alert") ){
+                    messageCode=1;
+                }
+                else if(speedStatus.equals("speed_warning") || distanceStatus.equals("distance_warning") ){
+                    messageCode=0;
+                }
+
+                String newMessage = String.format(Locale.US,
+                        "%d %s %d %.6f %.6f %.6f %d",
+                        data.getTimestamp(), // Assuming the timestamp is a long representing Unix time
+                        data.getId(),
+                        counter,
+                        data.getSpeed(),
+                        data.getLatitude(), data.getLongitude(), // Include latitude and longitude,
+                        messageCode
+                        ); // Moving speed to the end of the message
+                producer.send(new ProducerRecord<>("r2k_a_rob", data.getId(), newMessage));
+                }
+
             System.out.println("important Published to Kafka: " + message);
+            // If conditions are not "ok", send each filtered data point separately
+            if (!speedStatus.equals("speed_ok") || !distanceStatus.equals("distance_ok")) {
+                for (TrajectoryDataType filteredPoint : filteredDataPoints) {
+                    String individualMessage = String.format(Locale.US,
+                            "%d %s %.6f %.6f %.6f",
+                            filteredPoint.getTimestamp(), // Assuming the timestamp is a long representing Unix time
+                            filteredPoint.getId(),
+                            filteredPoint.getLatitude(), filteredPoint.getLongitude(),
+                            filteredPoint.getSpeed()); // Moving speed to the end of the message
+                    // Send the individual message to the Kafka topic
+                   // producer.send(new ProducerRecord<>("last_speed_gps", filteredPoint.getId(), individualMessage));
+                    System.out.println("Published individual filtered point to Kafka: " + individualMessage);
+                }
+            } else {
+                // If all conditions are "ok", no need to send the points separately
+                System.out.println("No filtered data points needed to be sent.");
+            }
         }
     }
 

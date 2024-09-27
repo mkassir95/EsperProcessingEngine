@@ -34,7 +34,7 @@ public class AverageSpeedCalculator {
     }
 
     public void setupAverageSpeedCalculation() {
-        String epl = "select id, window(*) as points from TrajectoryDataType.win:time_batch(15 sec) group by id";
+        String epl = "select id, window(*) as points from TrajectoryDataType.win:time_batch(12 sec) group by id";
         EPCompiled compiledQuery;
         try {
             EPCompiler compiler = EPCompilerProvider.getCompiler();
