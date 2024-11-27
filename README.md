@@ -1,5 +1,5 @@
 Project Overview
-This project utilizes Esper for its lightweight processing capabilities to handle continuous queries on robot trajectories. We've added a spatial-temporal extension to support specific trajectory queries for agricultural robots.
+This project utilizes Esper for its lightweight processing capabilities to handle continuous queries on robot trajectories. We've added a spatial-temporal extension to support specific trajectory queries for agricultural robots. Esper is designed to be implemented on robot edges and to process robot queries locally.
 
 Key Features
 Spatial-Temporal Queries: Enhanced to support complex trajectory data, enabling detailed analysis of robot movements within agricultural environments.
